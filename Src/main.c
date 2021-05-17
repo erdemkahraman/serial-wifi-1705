@@ -55,24 +55,16 @@
 #define TXBUFFERSIZE               	(COUNTOF(aTxBuffer) - 1)
 #define RXBUFFERSIZE              	11
 #define BufferSize  				750
-
-
-
 //---------uniqueid defines---------//
 #define MMIO16(addr)  (*(volatile uint16_t *)(addr))
 #define MMIO32(addr)  (*(volatile uint32_t *)(addr))
 #define U_ID          0x1ffff7e8
 //--------------------------//
-
-
 /* USER CODE END Includes */
-
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
-
-SPI_HandleTypeDef hspi1;
-SPI_HandleTypeDef hspi2;
-
+//SPI_HandleTypeDef hspi1;
+//SPI_HandleTypeDef hspi2;
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
@@ -82,11 +74,7 @@ DMA_HandleTypeDef hdma_usart2_rx;
 DMA_HandleTypeDef hdma_usart2_tx;
 DMA_HandleTypeDef hdma_usart3_rx;
 DMA_HandleTypeDef hdma_usart3_tx;
-
-
-
 struct ADRFData adrf6820;
-
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
 void Gps_bridge_ON();
 void esp_reset();
@@ -95,80 +83,29 @@ void esp_reset();
 /* Private variables ---------------------------------------------------------*/
 UartReqPackConf_t        		uartReqPackConf;
 UartResPackConf_t        		uartResPackConf;
-
 __IO uint8_t volatile Req_Conf_Flag = 0;
 __IO uint8_t volatile Req_ubx_Flag = 0;
 
-
-
 uint8_t 	DST_Buffer[BufferSize];
 uint8_t 	gps_readBuf[750] = {0};
-
 uint16_t 	length 					=	0;
-uint16_t 	length1 					=	0;
-uint8_t 	receiveflag	=0;
+//uint16_t 	length1 				=	0;
+uint8_t 	receiveflag				=	0;
+uint32_t 	gpsreadbuf5             =	0;
+uint32_t 	timeout_StartTime 		= 	0;
+uint8_t     uartRx_buf[UART_PACKET_SIZE] = {0};
+uint8_t     uartTx_buf[UART_PACKET_SIZE] = {0};
+volatile    uint16_t start_index	     =   0;
+char 	    sbuf[25];
+uint8_t 	aRxBuffer[RXBUFFERSIZE];
+uint8_t 	uart_toogle = 1;
 
-uint8_t 	dstlength				= 0 ;
-uint32_t 	gpsreadbuf5               =   0;
-
-
-float       UBX_CRC = 0;
-uint8_t CK_A, CK_B;
-
-uint8_t e = 2;
-uint8_t j = 0;
-
-
-uint8_t 	BootloaderStart_ID = 0;
-
-uint8_t 	rx_part_complate = 0;
-uint8_t 	cnt = 0;
-uint32_t 	number_SendBuf = 0x00;
-uint8_t		tryAgain;
-
-uint32_t timeout_StartTime = 0;
-
-uint8_t             resPackSeq = 0;
-
-uint32_t            reqSessionId = 0;
-UartReqPackHeader_t reqHeaderRead;
-uint                runTestForIndex;
-uint8_t             singleTestCount = 1;
-uint16_t            currentTest = 0;
-__IO uint8_t        isRunning = 0;
-uint8_t             ledToggleRed = 0;
-uint8_t             ledToggleGreen = 0;
-uint8_t             ledToggleBlue = 0;
-uint8_t             uartRx_buf[UART_PACKET_SIZE] = {0};
-uint8_t             uartTx_buf[UART_PACKET_SIZE] = {0};
-uint8_t             uartRx_payload[UART_PACKET_SIZE - sizeof(UartReqPackHeader_t)] = {0};
-
-uint8_t 			isDownloding = 0;
-
-
-volatile uint16_t start_index = 0;
-
-uint8_t msg1[] = "**** uart -> gps   **** \n\r ";
-uint8_t msg2[] = "**** uart -> stm32 **** \n\r ";
-char sbuf[25];
-
-uint8_t aRxBuffer[RXBUFFERSIZE];
-
-#define UART_BUFFER_SIZE 256
-uint8_t             uartRx_buf_irq[UART_BUFFER_SIZE] = {0};
-uint8_t             uartTx_buf_irq[UART_BUFFER_SIZE] = {0};
-uint8_t uart_toogle = 1;
-#define timeout 						5000
-
-/* public */
-
-/* private */
 #define line_size             256
 static char line_buffer[line_size];
 
-char ipv4[13] = {0};
-char mask[13] = {0};
-char gw[13]   = {0};
+char 		ipv4[13] = {0};
+char 		mask[13] = {0};
+char 		gw[13]   = {0};
 
 
 /* USER CODE END PV */
@@ -246,28 +183,13 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-
-
   MX_I2C1_Init();
-
-
-  /* USER CODE BEGIN 2 */
-
-
   SDIO_PIN_Setup();
-
-
-
-
   Uart_Transmit_Header_Init();
-
   lcd_init ();
-
   SSD1306_Init ();
-
   SSD1306_Fill(SSD1306_COLOR_BLACK);
   SSD1306_UpdateScreen();
-
   SSD1306_Fill (0);
   SSD1306_UpdateScreen(); //display
 
@@ -288,6 +210,7 @@ int main(void)
   SSD1306_UpdateScreen(); //display
 
   //esp resetlenir başlangıçta gönderdiği IP bilgisini almak için//
+
   esp_reset();
 
 
@@ -302,7 +225,7 @@ int main(void)
 
   MX_USART1_UART_Init();
 
-  HAL_Delay(2000);//IP gönderimi için bekleme
+  HAL_Delay(2000);//IP gönderimi için bekleme  //115200 baud versiyonunda değiştirilmiştir.
 
   //IP adresi okuma ve OLED ekranda gösterme
   if(read_line(&huart1)==HAL_OK){
@@ -317,9 +240,8 @@ int main(void)
 
 
   /* USER CODE END 2 */
+
   MX_USART2_UART_Init();
- //display
-  /* Infinite loop */
   SSD1306_GotoXY (0, 16);
   SSD1306_Puts (" #Wi-Fi OK#  ", &Font_11x18, 1);// Wifi'nin bağlı olduğunu gösterir
   SSD1306_UpdateScreen();
@@ -330,6 +252,7 @@ int main(void)
 
 		  HAL_UART_RxCpltCallback(&huart1);//ESP üzerinden gelen POLL UBX datası burada çalışır.
 		  	  	  	  	  	  	  	  	   //CTRL tuşuna basılı tutup fonksiyon üzerine tıklayınız.
+
 		  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 	  }
 
@@ -356,7 +279,7 @@ int main(void)
 				  SSD1306_GotoXY (10, 19);
 				  sprintf(sbuf,"Set-6820");
 				  ADRF_Setup_GPS(&adrf6820);
-				 // ADRF6820_isLock = 1;
+				  ADRF6820_isLock = 1;
 				  SSD1306_Puts ((char*)sbuf, &Font_11x18, 1);
 
 			  }
@@ -369,7 +292,7 @@ int main(void)
 				  SSD1306_GotoXY (10, 19);
 				  sprintf(sbuf,"Set-6720");
 				  ADRF6720_Setup_GPS();
-				//  ADRF6720_isLock = 1;
+				  ADRF6720_isLock = 1;
 				  SSD1306_Puts ((char*)sbuf, &Font_11x18, 1);
 
 			  }
@@ -441,10 +364,6 @@ int main(void)
 	  SSD1306_GotoXY(17,52);
 	  SSD1306_Puts(ipv4,&Font_7x10,1);
 	  SSD1306_UpdateScreen();
-
-
-
-
 	  /* USER CODE BEGIN 3 */
 }
   /* USER CODE END 3 */
@@ -539,7 +458,7 @@ static void MX_I2C1_Init(void)
 /*static void MX_SPI2_Init(void)
 {
 
-  /* SPI2 parameter configuration*/
+   //SPI2 parameter configuration
   /*hspi2.Instance = SPI2;
   hspi2.Init.Mode = SPI_MODE_MASTER;
   hspi2.Init.Direction = SPI_DIRECTION_2LINES;
@@ -979,13 +898,8 @@ void Gps_bridge_ON()
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
 
 {
-
-
-	__HAL_UART_FLUSH_DRREGISTER(&huart1);
+    __HAL_UART_FLUSH_DRREGISTER(&huart1);
 	HAL_UART_Receive(&huart1,(uint8_t*)DST_Buffer,16,100);
-
-
-
 //--------matlab'den fonksiyon gelmeden önce bekleme---------//
 
 	if(DST_Buffer[0] == 0xB5 && DST_Buffer[1] == 0x62) //eğer istenen data UBX datası ise
@@ -1010,19 +924,12 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
 				break;
 			default:
 				break;
-			} // switch
-			//} // if crc
-		} // if req*/
+			}
+		}
 	}
 	memset(DST_Buffer, 0   , UART_PACKET_SIZE);
 	memset(gps_readBuf, 0   , 500);
-
-	//__HAL_UART_ENABLE_IT(&huart1,UART_IT_RXNE);
-
 }
-
-
-
 /* USER CODE END 4 */
 
 /**
